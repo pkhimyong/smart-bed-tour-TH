@@ -2021,7 +2021,13 @@ selectPhase('login');
 (() => {
   'use strict';
 
+  /* Tour display modes:
+     - 'always'  = testing mode; show every time Dashboard opens
+     - 'daily'   = checkbox hides the automatic Tour for the current day only
+     - 'forever' = checkbox hides the automatic Tour until localStorage is cleared */
+  const TOUR_DISPLAY_MODE = 'always';
   const TOUR_DISABLED_KEY = 'mrBigSmartBedTourDisabled';
+  const TOUR_DISABLED_DATE_KEY = 'mrBigSmartBedTourDisabledDate';
   const DASHBOARD_ID = 's-dash-online';
   const SMARTBED_ID = 's-bed-online-6';
   const SMARTBED_STATE_KEY = 's-bed-online-6-left';
@@ -2116,8 +2122,20 @@ selectPhase('login');
     return isScreenVisible(DASHBOARD_ID);
   }
 
+  function getLocalDateKey() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   function isAutoTourDisabled() {
+    if (TOUR_DISPLAY_MODE === 'always') return false;
     try {
+      if (TOUR_DISPLAY_MODE === 'daily') {
+        return localStorage.getItem(TOUR_DISABLED_DATE_KEY) === getLocalDateKey();
+      }
       return localStorage.getItem(TOUR_DISABLED_KEY) === 'true';
     } catch (error) {
       console.warn('Website Tour: localStorage is unavailable.', error);
@@ -2126,9 +2144,13 @@ selectPhase('login');
   }
 
   function saveTourPreference() {
-    if (!disableAutoTourSelected) return;
+    if (!disableAutoTourSelected || TOUR_DISPLAY_MODE === 'always') return;
     try {
-      localStorage.setItem(TOUR_DISABLED_KEY, 'true');
+      if (TOUR_DISPLAY_MODE === 'daily') {
+        localStorage.setItem(TOUR_DISABLED_DATE_KEY, getLocalDateKey());
+      } else {
+        localStorage.setItem(TOUR_DISABLED_KEY, 'true');
+      }
     } catch (error) {
       console.warn('Website Tour: could not save preference.', error);
     }
@@ -2186,7 +2208,7 @@ selectPhase('login');
       <div class="mrbig-native-tour-description"></div>
       <label class="mrbig-native-tour-preference">
         <input type="checkbox">
-        <span>ไม่ต้องแสดงคำแนะนำอัตโนมัติอีก</span>
+        <span>ไม่ต้องแสดงคำแนะนำอัตโนมัติอีกในวันนี้</span>
       </label>
       <div class="mrbig-native-tour-progress"></div>
       <div class="mrbig-native-tour-footer">
@@ -2238,12 +2260,21 @@ selectPhase('login');
       disableAutoTourSelected = preferenceCheckbox.checked;
     });
 
+    /* Do not close the Tour when the user taps outside the popover.
+       On mobile this prevents accidental dismissal. The Tour can only be
+       closed with the X button, Skip button, or the final Done button. */
     overlay.addEventListener('pointerup', event => {
-      if (event.target === overlay) closeTour();
-    }, { passive: true });
+      if (event.target === overlay) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }, { passive: false });
     overlay.addEventListener('click', event => {
-      if (event.target === overlay) closeTour();
-    });
+      if (event.target === overlay) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }, { passive: false });
   }
 
   function viewportSize() {
@@ -2349,7 +2380,7 @@ selectPhase('login');
       titleEl.textContent = step.title;
       descriptionEl.innerHTML = step.description;
       progressEl.textContent = `${currentIndex + 1} จาก ${TOUR_STEPS.length}`;
-      preferenceWrap.hidden = currentIndex !== 0;
+      preferenceWrap.hidden = TOUR_DISPLAY_MODE === 'always' || currentIndex !== 0;
       preferenceCheckbox.checked = disableAutoTourSelected;
       prevButton.hidden = currentIndex === 0;
       prevButton.disabled = currentIndex === 0;
@@ -2440,8 +2471,12 @@ selectPhase('login');
 
   document.addEventListener('DOMContentLoaded', scheduleAutomaticTour, { once: true });
 
-  // To enable automatic tours again, run:
+  // TESTING: TOUR_DISPLAY_MODE is currently 'always', so the Tour appears every time.
+  // FINAL DAILY MODE: change TOUR_DISPLAY_MODE to 'daily'. The checkbox will then
+  // hide automatic Tour only for the current local calendar day.
+  // Reset saved preferences manually with:
   // localStorage.removeItem('mrBigSmartBedTourDisabled');
+  // localStorage.removeItem('mrBigSmartBedTourDisabledDate');
 })();
 </script>
 
